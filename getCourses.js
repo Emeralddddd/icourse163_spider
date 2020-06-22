@@ -1,31 +1,8 @@
 const fs = require("fs");
+const path = require("path");
 const puppeteer = require('puppeteer');
 
-// const base_url = 'https://www.icourse163.org';
-// (async () => {
-//     const browser = await puppeteer.launch({headless:false});
-//     const page = await browser.newPage();
-//     await page.goto('https://www.icourse163.org/university/PKU');
-//     let next = true;
-//     const results = [];
-//     while (next){
-//         const tmp = await page.$$eval('#newCourseList > div > div:nth-child(2)> div> a',input=>input.map(x=>x.getAttribute('href')));
-//         const btn = await page.$('.znxt');
-//         results.push(...tmp);
-//         next = await page.evaluate(x=>x.className.indexOf('js-disabled')=== -1,btn);
-//         await btn.click();
-//     }
-//     await browser.close();
-// })();
-
-// const getCourses = async (university_url)=>{
-//     const url = base_url+university_url;
-//     const browser = await puppeteer.launch({headless:true});
-//     const page = await browser.newPage();
-//     await page.goto('https://www.icourse163.org/university/PKU');
-// };
-
-class spider{
+class Spider{
     constructor() {
         this.browser = null;
         this.base_url = 'https://www.icourse163.org';
@@ -34,7 +11,7 @@ class spider{
         this.browser = await puppeteer.launch({headless:true});
     }
     async closeBrowser(){
-        this.browser.close()
+        await this.browser.close()
     }
     getCourse = async (university_url)=>{
         const url = this.base_url+university_url;
@@ -43,13 +20,48 @@ class spider{
         let next = true;
         const results = [];
         while (next){
+            //await page.content();
+            await page.waitFor(2000);
+            //await page.waitForSelector('.znxt');
             const tmp = await page.$$eval('#newCourseList > div > div:nth-child(2)> div> a',input=>input.map(x=>x.getAttribute('href')));
-            const btn = await page.$('.znxt');
             results.push(...tmp);
-            next = await page.evaluate(x=>x.className.indexOf('js-disabled')=== -1,btn);
-            await btn.click();
+            const btn = await page.$('#j-courses .znxt');
+            if(!btn){
+                break;
+            }
+            try{
+                next = await page.evaluate(x=>x.className.indexOf('js-disabled')=== -1,btn);
+                await btn.click();
+            }catch (e) {
+                console.log(e);
+            }
+            await page.waitFor(2000);
         }
         await page.close();
         return results;
     };
 }
+
+(async ()=>{
+    const sleep = (time) => new Promise((res, rej) => setTimeout(res, time));
+    filepath = path.join(__dirname,'data/university.json');
+    let list = JSON.parse(fs.readFileSync(filepath,'utf8')).slice(54);
+    const spider = new Spider();
+    await spider.openBrowser();
+    for (let university_url of list){
+        const key = university_url.split('/').pop();
+        const value = await spider.getCourse(university_url);
+        const filepath = path.join(__dirname,'data/courses/'+key+'.json');
+        const content = JSON.stringify(value);
+        fs.writeFile(filepath,content,function (err) {
+            if(err){
+                return console.log(err);
+            }
+            console.log(key+' write successfully')
+        });
+        await sleep(2500);
+    }
+    // const university_url="/university/PKU";
+})();
+
+
